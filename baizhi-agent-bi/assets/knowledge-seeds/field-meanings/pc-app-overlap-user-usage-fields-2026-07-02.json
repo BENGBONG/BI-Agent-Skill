@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "kind": "query_field_meaning_overlay",
+  "sessionId": "seed-pc-app-overlap-2026-07-02",
+  "createdAt": "2026-07-02T11:41:03.146Z",
+  "confirmedBy": "internal_seed",
+  "source": {
+    "question": "按新口径查询本周 PC 端和 APP 双端用户的重合度和分群指标",
+    "providerId": "internal_data_query",
+    "metrics": [
+      "pc_app_user_jaccard_overlap",
+      "app_user_pc_usage_rate",
+      "pc_user_app_usage_rate",
+      "pc_app_user_segments"
+    ],
+    "metricDefinition": "Jaccard=APP用户∩PC用户 / APP用户∪PC用户；APP使用用户=APP_LOGIN成功日志或录音卡会议或当前绑定录音卡或录音卡激活记录；PC使用用户=PC成功登录日志且login_type in ('PHONE_CODE','EMAIL_CODE')。",
+    "calculationLogic": "Chronos 查询 PC 登录与 APP_LOGIN 用户集合，Ares 查询录音卡会议、当前绑定、激活用户集合；按 SHA2(user_id) 在本地内存合并。APP集合为四类 APP 来源并集，PC集合为 PC 登录集合；统计 overlap、union、Jaccard、APP用户PC使用率、PC用户APP使用率和分群。",
+    "sourceTables": [
+      "chronos.t_user_login_logs",
+      "ares.card_meeting",
+      "ares.card_meeting_user_device",
+      "ares.device_activation_record"
+    ],
+    "timeRange": "本周事件窗口；当前绑定录音卡为查询时点快照。",
+    "timeField": "Chronos t_user_login_logs.created_at；Ares card_meeting 使用 COALESCE(start_at, created_at)；device_activation_record.activated_at；card_meeting_user_device 当前绑定使用 status/deleted 快照。",
+    "dimensions": [
+      "整体",
+      "用户分群(pc_only/app_only/pc_app_overlap)",
+      "APP来源(app_login/card_meeting/current_bound_card/card_activation)"
+    ],
+    "filters": [
+      "t_user_login_logs.login_result = SUCCESS",
+      "PC login_type in ('PHONE_CODE','EMAIL_CODE')",
+      "APP_LOGIN login_type = 'APP_LOGIN'",
+      "card_meeting deleted=0",
+      "card_meeting_user_device 当前绑定：deleted=0 and status=1"
+    ],
+    "dedupLogic": "所有来源先按 user_id 去重；跨库合并时仅在内存使用 SHA2(user_id,256) 后的 user_key 做集合并交，不保存用户明细或哈希明细。",
+    "joinLogic": "跨 Chronos/Ares 按同一 user_id 的 SHA2 哈希键在本地内存集合合并；结果只保存聚合数。"
+  },
+  "updates": [
+    {
+      "field": "user_id",
+      "meaning": "用户唯一标识。PC 与 APP 重合度分析中，所有登录日志、录音卡会议、录音卡绑定和录音卡激活记录都按 user_id 作为统计单位去重；跨 Chronos 和 Ares 两个生产库合并时，不保存原始 user_id，只使用 SHA2(user_id,256) 后的内存键计算并集和交集。",
+      "detail": "用户唯一标识。PC 与 APP 重合度分析中，所有登录日志、录音卡会议、录音卡绑定和录音卡激活记录都按 user_id 作为统计单位去重；跨 Chronos 和 Ares 两个生产库合并时，不保存原始 user_id，只使用 SHA2(user_id,256) 后的内存键计算并集和交集。",
+      "role": "dedup_key",
+      "sourceTables": [
+        "chronos.t_user_login_logs",
+        "ares.card_meeting",
+        "ares.card_meeting_user_device",
+        "ares.device_activation_record"
+      ],
+      "calculationUsage": "作为 PC 使用用户、APP 使用用户、APP & PC 重合用户、APP ∪ PC 去重用户总数的唯一去重键。",
+      "evidence": [
+        "assets/knowledge-seeds/field-meanings/pc-app-overlap-user-usage-fields-2026-07-02.json"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "login_type",
+      "meaning": "登录方式枚举字段。PC 使用用户只统计成功登录且 login_type in ('PHONE_CODE','EMAIL_CODE') 的用户；APP 登录来源只统计成功登录且 login_type = 'APP_LOGIN' 的用户。",
+      "detail": "登录方式枚举字段。PC 使用用户只统计成功登录且 login_type in ('PHONE_CODE','EMAIL_CODE') 的用户；APP 登录来源只统计成功登录且 login_type = 'APP_LOGIN' 的用户。",
+      "role": "filter",
+      "sourceTables": [
+        "chronos.t_user_login_logs"
+      ],
+      "calculationUsage": "区分 PC 登录集合和 APP_LOGIN 集合，PC 集合只使用 PHONE_CODE/EMAIL_CODE，APP 登录集合只使用 APP_LOGIN。",
+      "evidence": [
+        "assets/backend/chronos-agent-facade/src/main/java/com/br/agent/facade/entity/UserLoginLogEntity.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "login_result",
+      "meaning": "登录结果字段。PC 与 APP_LOGIN 口径只把成功登录纳入使用用户集合，通常使用 LOWER(login_result) = 'success' 或等价 SUCCESS 枚举过滤成功日志。",
+      "detail": "登录结果字段。PC 与 APP_LOGIN 口径只把成功登录纳入使用用户集合，通常使用 LOWER(login_result) = 'success' 或等价 SUCCESS 枚举过滤成功日志。",
+      "role": "filter",
+      "sourceTables": [
+        "chronos.t_user_login_logs"
+      ],
+      "calculationUsage": "过滤失败登录，确保 PC 使用用户和 APP_LOGIN 来源用户都来自成功登录事件。",
+      "evidence": [
+        "assets/backend/chronos-agent-facade/src/main/java/com/br/agent/facade/entity/UserLoginLogEntity.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "created_at",
+      "meaning": "Chronos 登录日志事件时间。用于限定 t_user_login_logs 的统计时间窗口，PC 成功登录和 APP_LOGIN 成功登录均按该字段过滤周期。",
+      "detail": "Chronos 登录日志事件时间。用于限定 t_user_login_logs 的统计时间窗口，PC 成功登录和 APP_LOGIN 成功登录均按该字段过滤周期。",
+      "role": "time_field",
+      "sourceTables": [
+        "chronos.t_user_login_logs"
+      ],
+      "calculationUsage": "限定 PC 成功登录和 APP_LOGIN 成功登录事件的统计周期。",
+      "evidence": [
+        "assets/backend/chronos-agent-facade/src/main/java/com/br/agent/facade/entity/UserLoginLogEntity.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "start_at",
+      "meaning": "录音卡会议开始时间。APP 使用用户口径中，有统计窗口内录音卡会议的用户计入 APP 使用用户；执行时优先使用 start_at，并可用 COALESCE(start_at, created_at) 作为会议事件时间。",
+      "detail": "录音卡会议开始时间。APP 使用用户口径中，有统计窗口内录音卡会议的用户计入 APP 使用用户；执行时优先使用 start_at，并可用 COALESCE(start_at, created_at) 作为会议事件时间。",
+      "role": "time_field",
+      "sourceTables": [
+        "ares.card_meeting"
+      ],
+      "calculationUsage": "用于过滤统计窗口内录音卡会议用户，满足 APP 使用用户四类来源之一。",
+      "evidence": [
+        "assets/backend/wisenote-eureka/src/main/java/com/wisenote/eureka/meeting/entity/Meeting.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "deleted",
+      "meaning": "软删除标记字段。录音卡会议和当前绑定录音卡口径均应排除 deleted 非 0 的记录，避免已删除会议或已删除绑定关系进入 APP 使用用户集合。",
+      "detail": "软删除标记字段。录音卡会议和当前绑定录音卡口径均应排除 deleted 非 0 的记录，避免已删除会议或已删除绑定关系进入 APP 使用用户集合。",
+      "role": "filter",
+      "sourceTables": [
+        "ares.card_meeting",
+        "ares.card_meeting_user_device"
+      ],
+      "calculationUsage": "card_meeting 使用 COALESCE(deleted,0)=0；card_meeting_user_device 使用 COALESCE(deleted,0)=0。",
+      "evidence": [
+        "assets/backend/wisenote-eureka/src/main/java/com/wisenote/eureka/meeting/entity/Meeting.java",
+        "assets/backend/wisenote-eureka/src/main/java/com/wisenote/eureka/meeting/entity/MeetingUserDeviceModel.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "status",
+      "meaning": "录音卡用户设备绑定状态字段。当前绑定录音卡口径使用 card_meeting_user_device.status = 1 表示当前仍处于 BOUND 状态；该状态来自后端 DeviceBindStatusEnum.BOUND=1。",
+      "detail": "录音卡用户设备绑定状态字段。当前绑定录音卡口径使用 card_meeting_user_device.status = 1 表示当前仍处于 BOUND 状态；该状态来自后端 DeviceBindStatusEnum.BOUND=1。",
+      "role": "filter",
+      "sourceTables": [
+        "ares.card_meeting_user_device"
+      ],
+      "calculationUsage": "识别当前绑定录音卡用户，作为 APP 使用用户四类来源之一。",
+      "evidence": [
+        "assets/backend/wisenote-eureka/src/main/java/com/wisenote/eureka/meeting/entity/MeetingUserDeviceModel.java",
+        "assets/backend/wisenote-eureka/src/main/java/com/wisenote/eureka/meeting/enums/DeviceBindStatusEnum.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    },
+    {
+      "field": "activated_at",
+      "meaning": "录音卡激活时间。APP 使用用户口径中，有统计窗口内录音卡激活记录的用户计入 APP 使用用户；如业务确认 status 存在失败或作废状态，应额外补充 status 成功过滤。",
+      "detail": "录音卡激活时间。APP 使用用户口径中，有统计窗口内录音卡激活记录的用户计入 APP 使用用户；如业务确认 status 存在失败或作废状态，应额外补充 status 成功过滤。",
+      "role": "time_field",
+      "sourceTables": [
+        "ares.device_activation_record"
+      ],
+      "calculationUsage": "限定统计窗口内录音卡激活用户，作为 APP 使用用户四类来源之一。",
+      "evidence": [
+        "assets/backend/wisenote-eureka/src/main/java/com/wisenote/eureka/meeting/entity/DeviceActivationRecord.java"
+      ],
+      "confidence": "internal_confirmed_seed"
+    }
+  ]
+}

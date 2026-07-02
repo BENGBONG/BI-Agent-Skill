@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent BI"
+  short_description: "通用本地 BI 工作区与可视化面板"
+  default_prompt: "使用 Agent BI 初始化本地 BI 工作区并创建一个查询 session。"
